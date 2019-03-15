@@ -47,6 +47,7 @@ module Authenticator.Vault (
   , _Vault
   , hotp
   , totp
+  , totp'
   , totp_
   , otp
   , someSecret
@@ -87,6 +88,8 @@ import qualified Data.Text              as T
 import qualified Data.Text.Encoding     as T
 import qualified Network.URI.Encode     as U
 import qualified Text.Trifecta          as P
+import qualified Data.ByteString as DB
+import Debug.Trace
 
 -- | OTP generation mode
 data Mode
@@ -248,14 +251,18 @@ hotp Sec{..} (HOTPState i) =
 
 -- | (Purely) generate a TOTP (time-based) code, for a given time.
 totp_ :: Secret 'TOTP -> UTCTime -> T.Text
-totp_ Sec{..} t = hashAlgo secAlgo >>~ \(I a) -> formatKey 3 . T.pack $
-    printf fmt $ OTP.totp a secKey (90 `addUTCTime` t) 30 secDigits
+totp_ Sec{..} t = T.pack $ show $ OTP.totp SHA1 secKey t 30 6
   where
     fmt = "%0" ++ show secDigits ++ "d"
 
 -- | Generate a TOTP (time-based) code in IO for the current time.
 totp :: Secret 'TOTP -> IO T.Text
-totp s = totp_ s <$> getCurrentTime
+totp s = totp' (secKey s)
+
+totp' :: DB.ByteString -> IO T.Text
+totp' s = do
+       a <- getCurrentTime
+       return $ T.pack $ printf "%06d" (OTP.totp SHA1 s a 30 6)
 
 -- | Abstract over both 'hotp' and 'totp'.
 otp :: forall m. SingI m => Secret m -> ModeState m -> IO (T.Text, ModeState m)
